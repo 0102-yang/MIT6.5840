@@ -1,0 +1,21 @@
+{
+    "name": "MIT6.5840",
+    "image": "golang:1.22.3-bookworm",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "golang.Go"
+            ]
+        },
+        "settings": {
+            "go.gopath": "/go",
+            "go.goroot": "/usr/local/go",
+            "go.toolsGopath": "/go/bin",
+            "go.useLanguageServer": true,
+            "files.eol": "\n"
+        }
+    },
+    "forwardPorts": [
+        8080
+    ]
+}
