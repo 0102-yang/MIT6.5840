@@ -7,19 +7,21 @@ package main
 // go build -buildmode=plugin rtiming.go
 //
 
-import "6.5840/mr"
-import "fmt"
-import "os"
-import "syscall"
-import "time"
-import "io/ioutil"
+import (
+	"fmt"
+	"os"
+	"syscall"
+	"time"
+
+	"6.5840/mr"
+)
 
 func nparallel(phase string) int {
 	// create a file so that other workers will see that
 	// we're running at the same time as them.
 	pid := os.Getpid()
 	myfilename := fmt.Sprintf("mr-worker-%s-%d", phase, pid)
-	err := ioutil.WriteFile(myfilename, []byte("x"), 0666)
+	err := os.WriteFile(myfilename, []byte("x"), 0666)
 	if err != nil {
 		panic(err)
 	}
@@ -62,16 +64,16 @@ func nparallel(phase string) int {
 func Map(filename string, contents string) []mr.KeyValue {
 
 	kva := []mr.KeyValue{}
-	kva = append(kva, mr.KeyValue{"a", "1"})
-	kva = append(kva, mr.KeyValue{"b", "1"})
-	kva = append(kva, mr.KeyValue{"c", "1"})
-	kva = append(kva, mr.KeyValue{"d", "1"})
-	kva = append(kva, mr.KeyValue{"e", "1"})
-	kva = append(kva, mr.KeyValue{"f", "1"})
-	kva = append(kva, mr.KeyValue{"g", "1"})
-	kva = append(kva, mr.KeyValue{"h", "1"})
-	kva = append(kva, mr.KeyValue{"i", "1"})
-	kva = append(kva, mr.KeyValue{"j", "1"})
+	kva = append(kva, mr.KeyValue{Key: "a", Value: "1"})
+	kva = append(kva, mr.KeyValue{Key: "b", Value: "1"})
+	kva = append(kva, mr.KeyValue{Key: "c", Value: "1"})
+	kva = append(kva, mr.KeyValue{Key: "d", Value: "1"})
+	kva = append(kva, mr.KeyValue{Key: "e", Value: "1"})
+	kva = append(kva, mr.KeyValue{Key: "f", Value: "1"})
+	kva = append(kva, mr.KeyValue{Key: "g", Value: "1"})
+	kva = append(kva, mr.KeyValue{Key: "h", Value: "1"})
+	kva = append(kva, mr.KeyValue{Key: "i", Value: "1"})
+	kva = append(kva, mr.KeyValue{Key: "j", Value: "1"})
 	return kva
 }
 

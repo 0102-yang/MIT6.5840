@@ -6,12 +6,14 @@ package main
 // go build -buildmode=plugin indexer.go
 //
 
-import "fmt"
-import "6.5840/mr"
+import (
+	"fmt"
+	"sort"
+	"strings"
+	"unicode"
 
-import "strings"
-import "unicode"
-import "sort"
+	"6.5840/mr"
+)
 
 // The mapping function is called once for each piece of the input.
 // In this framework, the key is the name of the file that is being processed,
@@ -24,7 +26,7 @@ func Map(document string, value string) (res []mr.KeyValue) {
 		m[w] = true
 	}
 	for w := range m {
-		kv := mr.KeyValue{w, document}
+		kv := mr.KeyValue{Key: w, Value: document}
 		res = append(res, kv)
 	}
 	return
