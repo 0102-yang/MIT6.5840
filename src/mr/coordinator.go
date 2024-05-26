@@ -21,58 +21,58 @@ type ReduceTask struct {
 
 type Coordinator struct {
 	// Your definitions here.
-	MapTasks          []MapTask
-	ReduceTasks       []ReduceTask
-	ReadySet          map[int]bool
-	ProcessingSet     map[int]bool
-	DoneSet           map[int]bool
-	CurrentWorkersNum int
-	NMap              int
-	NReduce           int
-	Mutex             sync.Mutex
+	mapTasks          []MapTask
+	reduceTasks       []ReduceTask
+	readySet          map[int]bool
+	processingSet     map[int]bool
+	doneSet           map[int]bool
+	currentWorkersNum int
+	nMap              int
+	nReduce           int
+	mutex             sync.Mutex
 }
 
 // Your code here -- RPC handlers for the worker to call.
 func (c *Coordinator) handle_timeout(globalTaskIndex int) {
 	time.AfterFunc(10*time.Second, func() {
-		c.Mutex.Lock()
-		defer c.Mutex.Unlock()
+		c.mutex.Lock()
+		defer c.mutex.Unlock()
 
-		_, exists := c.ProcessingSet[globalTaskIndex]
+		_, exists := c.processingSet[globalTaskIndex]
 		if exists {
-			delete(c.ProcessingSet, globalTaskIndex)
-			c.ReadySet[globalTaskIndex] = true
+			delete(c.processingSet, globalTaskIndex)
+			c.readySet[globalTaskIndex] = true
 			log.Printf("Coordinator: Global Task %v was timeout.\n", globalTaskIndex)
 		}
 	})
 }
 
 func (c *Coordinator) getGlobalTaskIndexByReduceTaskIndex(reduceTaskIndex int) int {
-	return reduceTaskIndex + c.NMap
+	return reduceTaskIndex + c.nMap
 }
 
 func (c *Coordinator) getReduceTaskIndexByGlobalTaskIndex(globalTaskIndex int) int {
-	return globalTaskIndex - c.NMap
+	return globalTaskIndex - c.nMap
 }
 
 func (c *Coordinator) isMapTaskIndex(globalTaskIndex int) bool {
-	return globalTaskIndex < c.NMap
+	return globalTaskIndex < c.nMap
 }
 
 func (c *Coordinator) isReduceTaskIndex(globalTaskIndex int) bool {
-	return globalTaskIndex >= c.NMap
+	return globalTaskIndex >= c.nMap
 }
 
 func (c *Coordinator) mapTasksAllDone() bool {
-	c.Mutex.Lock()
-	defer c.Mutex.Unlock()
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
-	for globalTaskIndex := range c.ReadySet {
+	for globalTaskIndex := range c.readySet {
 		if c.isMapTaskIndex(globalTaskIndex) {
 			return false
 		}
 	}
-	for globalTaskIndex := range c.ProcessingSet {
+	for globalTaskIndex := range c.processingSet {
 		if c.isMapTaskIndex(globalTaskIndex) {
 			return false
 		}
@@ -87,18 +87,18 @@ func (c *Coordinator) GetGlobalTaskNum(args *GlobalTaskNumArgs, reply *GlobalTas
 }
 
 func (c *Coordinator) GetMapTask(args *MapTaskArgs, reply *MapTaskReply) error {
-	c.Mutex.Lock()
-	defer c.Mutex.Unlock()
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
-	for globalTaskIndex := range c.ReadySet {
+	for globalTaskIndex := range c.readySet {
 		if c.isMapTaskIndex(globalTaskIndex) {
 			reply.Valid = true
 			reply.MapTaskIndex = globalTaskIndex
-			reply.MapFilename = c.MapTasks[globalTaskIndex].Filename
-			reply.NReduce = c.NReduce
+			reply.MapFilename = c.mapTasks[globalTaskIndex].Filename
+			reply.NReduce = c.nReduce
 
-			delete(c.ReadySet, globalTaskIndex)
-			c.ProcessingSet[globalTaskIndex] = true
+			delete(c.readySet, globalTaskIndex)
+			c.processingSet[globalTaskIndex] = true
 
 			go c.handle_timeout(globalTaskIndex)
 			return nil
@@ -115,19 +115,19 @@ func (c *Coordinator) GetReduceTask(args *ReduceTaskArgs, reply *ReduceTaskReply
 		return nil
 	}
 
-	c.Mutex.Lock()
-	defer c.Mutex.Unlock()
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
-	for globalTaskIndex := range c.ReadySet {
+	for globalTaskIndex := range c.readySet {
 		if c.isReduceTaskIndex(globalTaskIndex) {
 			reduceTaskIndex := c.getReduceTaskIndexByGlobalTaskIndex(globalTaskIndex)
 
 			reply.ReduceTaskStatus = Ready
 			reply.ReduceTaskIndex = reduceTaskIndex
-			reply.NMap = c.NMap
+			reply.NMap = c.nMap
 
-			delete(c.ReadySet, globalTaskIndex)
-			c.ProcessingSet[globalTaskIndex] = true
+			delete(c.readySet, globalTaskIndex)
+			c.processingSet[globalTaskIndex] = true
 
 			go c.handle_timeout(globalTaskIndex)
 			return nil
@@ -139,48 +139,48 @@ func (c *Coordinator) GetReduceTask(args *ReduceTaskArgs, reply *ReduceTaskReply
 }
 
 func (c *Coordinator) TaskDone(args *TaskDoneArgs, reply *TaskDoneReply) error {
-	c.Mutex.Lock()
-	defer c.Mutex.Unlock()
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
-	_, exists := c.ProcessingSet[args.GlobalTaskNum]
+	_, exists := c.processingSet[args.GlobalTaskNum]
 	if exists {
-		delete(c.ProcessingSet, args.GlobalTaskNum)
+		delete(c.processingSet, args.GlobalTaskNum)
 
 		if c.isMapTaskIndex(args.GlobalTaskNum) {
 			log.Printf("Coordinator: Global Task %v (Map Task %v) is done successfully.\n", args.GlobalTaskNum, args.GlobalTaskNum)
 		} else {
 			log.Printf("Coordinator: Global Task %v (Reduce Task %v) is done successfully.\n", args.GlobalTaskNum, c.getReduceTaskIndexByGlobalTaskIndex(args.GlobalTaskNum))
 		}
-		c.DoneSet[args.GlobalTaskNum] = true
+		c.doneSet[args.GlobalTaskNum] = true
 	}
 	return nil
 }
 
 func (c *Coordinator) SignInWorker(args *SignInWorkerArgs, reply *SignInWorkerReply) error {
-	c.Mutex.Lock()
-	defer c.Mutex.Unlock()
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
 	log.Printf("Coordinator: A worker signed in.\n")
 
-	c.CurrentWorkersNum++
+	c.currentWorkersNum++
 	return nil
 }
 
 func (c *Coordinator) PermitWorkerExit(args *PermitWorkerExitArgs, reply *PermitWorkerExitReply) error {
-	c.Mutex.Lock()
-	defer c.Mutex.Unlock()
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
-	reply.CanExit = len(c.DoneSet) == c.NMap+c.NReduce
+	reply.CanExit = len(c.doneSet) == c.nMap+c.nReduce
 	return nil
 }
 
 func (c *Coordinator) SignOutWorker(args *SignOutWorkerArgs, reply *SignOutWorkerReply) error {
-	c.Mutex.Lock()
-	defer c.Mutex.Unlock()
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
 	log.Printf("Coordinator: A worker signed out.\n")
 
-	c.CurrentWorkersNum--
+	c.currentWorkersNum--
 	return nil
 }
 
@@ -201,10 +201,10 @@ func (c *Coordinator) server() {
 // main/mrcoordinator.go calls Done() periodically to find out
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
-	c.Mutex.Lock()
-	defer c.Mutex.Unlock()
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
-	return len(c.DoneSet) == c.NMap+c.NReduce && c.CurrentWorkersNum == 0
+	return len(c.doneSet) == c.nMap+c.nReduce && c.currentWorkersNum == 0
 }
 
 // create a Coordinator.
@@ -213,36 +213,36 @@ func (c *Coordinator) Done() bool {
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	// Initialize the coordinator.
 	c := Coordinator{
-		MapTasks:          []MapTask{},
-		ReduceTasks:       []ReduceTask{},
-		ReadySet:          map[int]bool{},
-		ProcessingSet:     map[int]bool{},
-		DoneSet:           map[int]bool{},
-		CurrentWorkersNum: 0,
-		NMap:              len(files),
-		NReduce:           nReduce,
-		Mutex:             sync.Mutex{},
+		mapTasks:          []MapTask{},
+		reduceTasks:       []ReduceTask{},
+		readySet:          map[int]bool{},
+		processingSet:     map[int]bool{},
+		doneSet:           map[int]bool{},
+		currentWorkersNum: 0,
+		nMap:              len(files),
+		nReduce:           nReduce,
+		mutex:             sync.Mutex{},
 	}
 
 	// Allocate tasks.
 	for i, file := range files {
-		c.MapTasks = append(c.MapTasks, MapTask{
+		c.mapTasks = append(c.mapTasks, MapTask{
 			MapTaskIndex: i,
 			Filename:     file,
 		})
 	}
 	for i := 0; i < nReduce; i++ {
-		c.ReduceTasks = append(c.ReduceTasks, ReduceTask{
+		c.reduceTasks = append(c.reduceTasks, ReduceTask{
 			ReduceTaskIndex: i,
 		})
 	}
 
 	// Allocate ready set.
-	for i := 0; i < c.NMap; i++ {
-		c.ReadySet[i] = true
+	for i := 0; i < c.nMap; i++ {
+		c.readySet[i] = true
 	}
 	for i := 0; i < nReduce; i++ {
-		c.ReadySet[i+c.NMap] = true
+		c.readySet[i+c.nMap] = true
 	}
 
 	log.Println("Coordinator initialized.")
