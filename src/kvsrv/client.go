@@ -1,13 +1,17 @@
 package kvsrv
 
-import "6.5840/labrpc"
-import "crypto/rand"
-import "math/big"
+import (
+	"crypto/rand"
+	"math/big"
+	"time"
 
+	"6.5840/labrpc"
+)
 
 type Clerk struct {
-	server *labrpc.ClientEnd
-	// You will have to modify this struct.
+	server       *labrpc.ClientEnd
+	clientID     int64
+	logicalCount int
 }
 
 func nrand() int64 {
@@ -20,7 +24,9 @@ func nrand() int64 {
 func MakeClerk(server *labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.server = server
-	// You'll have to add code here.
+	ck.clientID = nrand()
+	ck.logicalCount = 1
+	DPrintf("Initialized Client-Clerk ID: %v. Sign in to server.", ck.clientID)
 	return ck
 }
 
@@ -35,9 +41,21 @@ func MakeClerk(server *labrpc.ClientEnd) *Clerk {
 // must match the declared types of the RPC handler function's
 // arguments. and reply must be passed as a pointer.
 func (ck *Clerk) Get(key string) string {
+	getArgs := &GetArgs{
+		Key:          key,
+		ClientID:     ck.clientID,
+		LogicalCount: ck.logicalCount,
+	}
+	getReply := &GetReply{}
 
-	// You will have to modify this function.
-	return ""
+	for {
+		ok := ck.server.Call("KVServer.Get", getArgs, getReply)
+		if ok {
+			ck.logicalCount++
+			return getReply.Value
+		}
+		time.Sleep(time.Duration(10 * time.Millisecond))
+	}
 }
 
 // shared by Put and Append.
@@ -49,8 +67,27 @@ func (ck *Clerk) Get(key string) string {
 // must match the declared types of the RPC handler function's
 // arguments. and reply must be passed as a pointer.
 func (ck *Clerk) PutAppend(key string, value string, op string) string {
-	// You will have to modify this function.
-	return ""
+	putAppendArgs := &PutAppendArgs{
+		Key:          key,
+		Value:        value,
+		ClientID:     ck.clientID,
+		LogicalCount: ck.logicalCount,
+	}
+	putAppendReply := &PutAppendReply{}
+	method := "KVServer." + op
+
+	for {
+		ok := ck.server.Call(method, putAppendArgs, putAppendReply)
+		if ok {
+			ck.logicalCount++
+			if op == "Append" {
+				return putAppendReply.Value
+			} else {
+				return ""
+			}
+		}
+		time.Sleep(time.Duration(10 * time.Millisecond))
+	}
 }
 
 func (ck *Clerk) Put(key string, value string) {
