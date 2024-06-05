@@ -21,6 +21,9 @@ In this lab, you will build a MapReduce system. The system includes:
 
 This lab is similar to the system described in the MapReduce paper. Note that this lab uses the term "coordinator" instead of the paper's "master".
 
+### Lab1 Test Result:
+![Lab1 Test Result](images/Lab1%20Test%20Result.png)
+
 ## Lab2: Key/Value Server
 
 In this lab, you will build a key/value server for a single machine. The server ensures that each operation is executed exactly once despite network failures and that the operations are linearizable. Later labs will replicate a server like this one to handle server crashes.
@@ -46,3 +49,6 @@ For concurrent calls, the return values and final state must be the same as if t
 ### Linearizability
 
 Linearizability is convenient for applications because it's the behavior you'd see from a single server that processes requests one at a time. For example, if one client gets a successful response from the server for an update request, subsequently launched reads from other clients are guaranteed to see the effects of that update. Providing linearizability is relatively easy for a single server.
+
+### Lab2 Test Result:
+![Lab2 Test Result](images/Lab2%20Test%20Result.png)
