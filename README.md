@@ -52,3 +52,22 @@ Linearizability is convenient for applications because it's the behavior you'd s
 
 ### Lab2 Test Result:
 ![Lab2 Test Result](images/Lab2%20Test%20Result.png)
+
+## Lab3 Raft
+
+This is the first lab in a series where we build a fault-tolerant key/value storage system. In this lab, we implement Raft, a replicated state machine protocol. Future labs will build a key/value service on top of Raft and shard the service for higher performance.
+
+### Replicated Service
+
+A replicated service stores complete copies of its state on multiple servers for fault tolerance. This allows the service to operate despite server failures. However, failures may cause replicas to hold differing data copies.
+
+### Raft Protocol
+
+Raft organizes client requests into a log sequence, ensuring all replicas see the same log. Each replica executes client requests in log order, maintaining identical service state. If a server recovers from failure, Raft updates its log. Raft operates as long as a majority of servers are alive and communicative.
+
+### Lab Goals
+In this lab, implement Raft as a Go object type with methods, to be used as a module in a larger service. Raft instances communicate via RPC to maintain replicated logs. Your Raft interface will support an indefinite sequence of numbered log entries. Once a log entry is committed, Raft sends it to the larger service for execution.
+
+Follow the design in the extended Raft paper, particularly Figure 2. Implement most of the paper's content, including saving persistent state and reading it after a node restarts. Do not implement cluster membership changes (Section 6).
+
+This lab is due in four parts, each with a corresponding due date.
