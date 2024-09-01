@@ -1,6 +1,6 @@
 {
     "name": "MIT6.5840",
-    "image": "golang:1.22.3-bookworm",
+    "image": "mcr.microsoft.com/devcontainers/go:dev-1.22-bookworm",
     "customizations": {
         "vscode": {
             "extensions": [
@@ -17,5 +17,6 @@
     },
     "forwardPorts": [
         8080
-    ]
+    ],
+    "remoteUser": "vscode"
 }
