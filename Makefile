@@ -1,6 +1,5 @@
 # This is the Makefile helping you submit the labs.
-# Just create 6.5840/api.key with your API key in it,
-# and submit your lab with the following command:
+# Submit your lab with the following command:
 #     $ make [lab1|lab2|lab3a|lab3b|lab3c|lab3d|lab4a|lab4b|lab5a|lab5b]
 
 LABS=" lab1 lab2 lab3a lab3b lab3c lab3d lab4a lab4b lab5a lab5b "
@@ -31,4 +30,4 @@ LABS=" lab1 lab2 lab3a lab3b lab3c lab3d lab4a lab4b lab5a lab5b "
 .PHONY: check-%
 check-%:
 	@echo "Checking that your submission builds correctly..."
-	@./.check-build git://g.csail.mit.edu/6.5840-golabs-2024 $(patsubst check-%,%,$@)
+	@./.check-build git://g.csail.mit.edu/6.5840-golabs-2025 $(patsubst check-%,%,$@)
