@@ -1,14 +1,11 @@
 # MIT 6.8240 Distributed Systems - Go Implementation
 
 This repository contains Go implementations of labs and projects for the MIT 6.8240 Distributed Systems course.
-
-# Course Information
-
 For more details about the course, visit the [course website](https://pdos.csail.mit.edu/6.824/).
 
-# Labs
-
 ## Lab 1: MapReduce
+
+### Task
 
 In this lab, you will build a MapReduce system. The system includes:
 
@@ -22,36 +19,47 @@ In this lab, you will build a MapReduce system. The system includes:
 This lab is similar to the system described in the MapReduce paper. Note that this lab uses the term "coordinator" instead of the paper's "master".
 
 ### Lab1 Test Result:
-![Lab1 Test Result](images/Lab1%20Test%20Result.png)
+<img src="images/Lab1 Test Result.png" alt="Lab1 Test Result" width="600">
 
 ## Lab2: Key/Value Server
 
-In this lab, you will build a key/value server for a single machine. The server ensures that each operation is executed exactly once despite network failures and that the operations are linearizable. Later labs will replicate a server like this one to handle server crashes.
+### Introduction
 
-### Server Operations
+In this lab you will build a key/value server for a single machine that ensures that each Put operation is executed at-most-once despite network failures and that the operations are linearizable. You will use this KV server to implement a lock. Later labs will replicate a server like this one to handle server crashes.
 
-Clients can send three different RPCs to the key/value server:
+### Core concepts
 
-1. `Put(key, value)`: Installs or replaces the value for a particular key in the map.
-2. `Append(key, arg)`: Appends `arg` to `key`'s value and returns the old value.
-3. `Get(key)`: Fetches the current value for the key.
+#### KV Server
 
-The server maintains an in-memory map of key/value pairs. Keys and values are strings. A `Get` for a non-existent key should return an empty string. An `Append` to a non-existent key should act as if the existing value were a zero-length string.
+The KV server allows clients to interact using a Clerk, which sends RPCs to the server. Clients can perform two types of RPCs: Put(key, value, version) and Get(key).
 
-### Client-Server Interaction
+#### ​Put Operation
+This operation installs or replaces the value for a specific key in the server's in-memory map only if the provided version number matches the server's current version number for that key. If the version numbers match, the server increments the version number. If the version numbers don't match, the server returns rpc.ErrVersion. A new key can be created by calling Put with a version number of 0, resulting in the server storing version 1.
 
-Each client talks to the server through a `Clerk` with `Put/Append/Get` methods. A `Clerk` manages RPC interactions with the server.
+#### Get Operation
 
-Your server must arrange that application calls to `Clerk Get/Put/Append` methods be linearizable. If client requests aren't concurrent, each client `Get/Put/Append` call should observe the modifications to the state implied by the preceding sequence of calls.
+This operation fetches the current value and its associated version for a given key. If the key does not exist on the server, the server returns rpc.ErrNoKey.
 
-For concurrent calls, the return values and final state must be the same as if the operations had executed one at a time in some order. Calls are concurrent if they overlap in time.
+#### Versioning and Linearizability
 
-### Linearizability
+Each key in the server's map is associated with a version number that records how many times the key has been written.
+Maintaining version numbers is useful for implementing locks and ensuring at-most-once semantics for Put operations, especially in unreliable networks where clients might retransmit requests.
+Linearizability:
 
-Linearizability is convenient for applications because it's the behavior you'd see from a single server that processes requests one at a time. For example, if one client gets a successful response from the server for an update request, subsequently launched reads from other clients are guaranteed to see the effects of that update. Providing linearizability is relatively easy for a single server.
+Once the lab is completed and all tests are passed, the key/value service will provide linearizability from the client's perspective. This means that if client operations are not concurrent, each client's Clerk.Get and Clerk.Put will observe the modifications implied by the preceding sequence of operations.
 
-### Lab2 Test Result:
-![Lab2 Test Result](images/Lab2%20Test%20Result.png)
+For concurrent operations, the return values and final state will be the same as if the operations had executed one at a time in some order. Operations are considered concurrent if they overlap in time.
+Linearizability is beneficial for applications because it ensures that the behavior is consistent with a single server processing requests sequentially, making it easier to reason about the system's state.
+
+### Task A: Key/value server with reliable network(easy)
+
+#### Target
+
+Your first task is to implement a solution that works when there are no dropped messages. You'll need to add RPC-sending code to the Clerk Put/Get methods in client.go, and implement Put and Get RPC handlers in server.go.
+
+#### Result
+
+<img src="images/Lab2 Task A Result.png" alt="Task A Result" width="600">
 
 ## Lab3 Raft
 
