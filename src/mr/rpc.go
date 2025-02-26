@@ -11,66 +11,51 @@ import (
 	"strconv"
 )
 
+//
+// example to show how to declare the arguments
+// and reply for an RPC.
+//
+
+type ExampleArgs struct {
+	X int
+}
+
+type ExampleReply struct {
+	Y int
+}
+
 // Add your RPC definitions here.
-type MapTaskArgs struct {
-}
-
-type MapTaskReply struct {
-	Valid        bool
-	MapTaskIndex int
-	MapFilename  string
-	NReduce      int
-}
-
-type ReduceTaskArgs struct {
-}
-
-type ReduceTaskStatusType int
+type RequestStatus int
+type TaskType int
 
 const (
-	NotReady ReduceTaskStatusType = iota
+	NotReady RequestStatus = iota
 	Ready
-	Invalid
+	Completed
+)
+const (
+	MapTask TaskType = iota
+	ReduceTask
 )
 
-type ReduceTaskReply struct {
-	ReduceTaskStatus ReduceTaskStatusType
-	ReduceTaskIndex  int
-	NMap             int
+type RequestTaskArgs struct {
+}
+type RequestTaskReply struct {
+	Status  RequestStatus
+	Type    TaskType
+	ID      int
+	NMap    int
+	NReduce int
+
+	// For MapTask.
+	MapFileName string
 }
 
-type TaskDoneArgs struct {
-	GlobalTaskNum int
+type ReportTaskArgs struct {
+	ID   int
+	Type TaskType
 }
-
-type TaskDoneReply struct {
-}
-
-type GlobalTaskNumArgs struct {
-	ReduceTaskNum int
-}
-
-type GlobalTaskNumReply struct {
-	GlobalTaskNum int
-}
-
-type SignInWorkerArgs struct {
-}
-
-type SignInWorkerReply struct {
-}
-
-type SignOutWorkerArgs struct {
-}
-
-type SignOutWorkerReply struct {
-}
-
-type PermitWorkerExitArgs struct {
-}
-
-type PermitWorkerExitReply struct {
-	CanExit bool
+type ReportTaskReply struct {
 }
 
 // Cook up a unique-ish UNIX-domain socket name
