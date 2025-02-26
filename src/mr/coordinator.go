@@ -10,177 +10,120 @@ import (
 	"time"
 )
 
-type MapTask struct {
-	MapTaskIndex int
-	Filename     string
-}
+type TaskStatus int
 
-type ReduceTask struct {
-	ReduceTaskIndex int
+const (
+	InComplete TaskStatus = iota
+	Complete
+	Processing
+)
+
+type Task struct {
+	ID     int
+	Type   TaskType
+	Status TaskStatus
+
+	// For MapTask.
+	MapFileName string
 }
 
 type Coordinator struct {
-	// Your definitions here.
-	mapTasks          []MapTask
-	reduceTasks       []ReduceTask
-	readySet          map[int]bool
-	processingSet     map[int]bool
-	doneSet           map[int]bool
-	currentWorkersNum int
-	nMap              int
-	nReduce           int
-	mutex             sync.Mutex
+	tasks            []Task
+	currentWorkerNum int
+	nMap             int
+	nReduce          int
+	mutex            sync.Mutex
 }
 
 // Your code here -- RPC handlers for the worker to call.
-func (c *Coordinator) handle_timeout(globalTaskIndex int) {
-	time.AfterFunc(10*time.Second, func() {
-		c.mutex.Lock()
-		defer c.mutex.Unlock()
 
-		_, exists := c.processingSet[globalTaskIndex]
-		if exists {
-			delete(c.processingSet, globalTaskIndex)
-			c.readySet[globalTaskIndex] = true
-			log.Printf("Coordinator: Global Task %v was timeout.\n", globalTaskIndex)
-		}
-	})
-}
-
-func (c *Coordinator) getGlobalTaskIndexByReduceTaskIndex(reduceTaskIndex int) int {
-	return reduceTaskIndex + c.nMap
-}
-
-func (c *Coordinator) getReduceTaskIndexByGlobalTaskIndex(globalTaskIndex int) int {
-	return globalTaskIndex - c.nMap
-}
-
-func (c *Coordinator) isMapTaskIndex(globalTaskIndex int) bool {
-	return globalTaskIndex < c.nMap
-}
-
-func (c *Coordinator) isReduceTaskIndex(globalTaskIndex int) bool {
-	return globalTaskIndex >= c.nMap
-}
-
-func (c *Coordinator) mapTasksAllDone() bool {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	for globalTaskIndex := range c.readySet {
-		if c.isMapTaskIndex(globalTaskIndex) {
-			return false
-		}
-	}
-	for globalTaskIndex := range c.processingSet {
-		if c.isMapTaskIndex(globalTaskIndex) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func (c *Coordinator) GetGlobalTaskNum(args *GlobalTaskNumArgs, reply *GlobalTaskNumReply) error {
-	reply.GlobalTaskNum = c.getGlobalTaskIndexByReduceTaskIndex(args.ReduceTaskNum)
+// an example RPC handler.
+//
+// the RPC argument and reply types are defined in rpc.go.
+func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
+	reply.Y = args.X + 1
 	return nil
 }
 
-func (c *Coordinator) GetMapTask(args *MapTaskArgs, reply *MapTaskReply) error {
+func (c *Coordinator) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	for globalTaskIndex := range c.readySet {
-		if c.isMapTaskIndex(globalTaskIndex) {
-			reply.Valid = true
-			reply.MapTaskIndex = globalTaskIndex
-			reply.MapFilename = c.mapTasks[globalTaskIndex].Filename
-			reply.NReduce = c.nReduce
+	allTasksCompleted := true
+	allMapTasksCompleted := true
+	for _, task := range c.tasks {
+		if !allTasksCompleted && !allMapTasksCompleted {
+			break
+		}
 
-			delete(c.readySet, globalTaskIndex)
-			c.processingSet[globalTaskIndex] = true
-
-			go c.handle_timeout(globalTaskIndex)
-			return nil
+		if task.Status != Complete {
+			allTasksCompleted = false
+			if task.Type == MapTask {
+				allMapTasksCompleted = false
+			}
 		}
 	}
 
-	reply.Valid = false
-	return nil
-}
-
-func (c *Coordinator) GetReduceTask(args *ReduceTaskArgs, reply *ReduceTaskReply) error {
-	if !c.mapTasksAllDone() {
-		reply.ReduceTaskStatus = NotReady
+	if allTasksCompleted {
+		reply.Status = Completed
 		return nil
 	}
 
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	if allMapTasksCompleted {
+		// Allocate reduce task.
+		for i := c.nMap; i < c.nMap+c.nReduce; i++ {
+			if c.tasks[i].Status == InComplete {
+				c.tasks[i].Status = Processing
+				c.currentWorkerNum++
 
-	for globalTaskIndex := range c.readySet {
-		if c.isReduceTaskIndex(globalTaskIndex) {
-			reduceTaskIndex := c.getReduceTaskIndexByGlobalTaskIndex(globalTaskIndex)
+				reply.Status = Ready
+				reply.Type = ReduceTask
+				reply.ID = c.tasks[i].ID
+				reply.NMap = c.nMap
+				reply.NReduce = c.nReduce
 
-			reply.ReduceTaskStatus = Ready
-			reply.ReduceTaskIndex = reduceTaskIndex
-			reply.NMap = c.nMap
+				// log.Printf("Reduce task %d allocated\n", i)
 
-			delete(c.readySet, globalTaskIndex)
-			c.processingSet[globalTaskIndex] = true
+				go c.checkTimeout(i)
+				break
+			}
+		}
+	} else {
+		// Allocate map task firstly.
+		for i := 0; i < c.nMap; i++ {
+			if c.tasks[i].Status == InComplete {
+				c.tasks[i].Status = Processing
+				c.currentWorkerNum++
 
-			go c.handle_timeout(globalTaskIndex)
-			return nil
+				reply.Status = Ready
+				reply.Type = MapTask
+				reply.ID = c.tasks[i].ID
+				reply.NMap = c.nMap
+				reply.NReduce = c.nReduce
+				reply.MapFileName = c.tasks[i].MapFileName
+
+				// log.Printf("Map task %d allocated\n", i)
+
+				go c.checkTimeout(i)
+				break
+			}
 		}
 	}
-
-	reply.ReduceTaskStatus = Invalid
 	return nil
 }
 
-func (c *Coordinator) TaskDone(args *TaskDoneArgs, reply *TaskDoneReply) error {
+func (c *Coordinator) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	_, exists := c.processingSet[args.GlobalTaskNum]
-	if exists {
-		delete(c.processingSet, args.GlobalTaskNum)
-
-		if c.isMapTaskIndex(args.GlobalTaskNum) {
-			log.Printf("Coordinator: Global Task %v (Map Task %v) is done successfully.\n", args.GlobalTaskNum, args.GlobalTaskNum)
-		} else {
-			log.Printf("Coordinator: Global Task %v (Reduce Task %v) is done successfully.\n", args.GlobalTaskNum, c.getReduceTaskIndexByGlobalTaskIndex(args.GlobalTaskNum))
-		}
-		c.doneSet[args.GlobalTaskNum] = true
+	if args.Type == MapTask {
+		c.tasks[args.ID].Status = Complete
+		// log.Printf("Map task %d completed\n", args.ID)
+	} else {
+		c.tasks[args.ID+c.nMap].Status = Complete
+		// log.Printf("Reduce task %d completed\n", args.ID)
 	}
-	return nil
-}
-
-func (c *Coordinator) SignInWorker(args *SignInWorkerArgs, reply *SignInWorkerReply) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	log.Printf("Coordinator: A worker signed in.\n")
-
-	c.currentWorkersNum++
-	return nil
-}
-
-func (c *Coordinator) PermitWorkerExit(args *PermitWorkerExitArgs, reply *PermitWorkerExitReply) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	reply.CanExit = len(c.doneSet) == c.nMap+c.nReduce
-	return nil
-}
-
-func (c *Coordinator) SignOutWorker(args *SignOutWorkerArgs, reply *SignOutWorkerReply) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	log.Printf("Coordinator: A worker signed out.\n")
-
-	c.currentWorkersNum--
+	c.currentWorkerNum--
 	return nil
 }
 
@@ -198,56 +141,70 @@ func (c *Coordinator) server() {
 	go http.Serve(l, nil)
 }
 
+// Check timeout for a task.
+func (c *Coordinator) checkTimeout(taskID int) {
+	time.Sleep(10 * time.Second)
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	task := &c.tasks[taskID]
+	if task.Status == Processing {
+		// Timeout, reset the task to incomplete.
+		task.Status = InComplete
+		c.currentWorkerNum--
+		/* if task.Type == MapTask {
+			log.Printf("Map task %d timeout, reset to incomplete\n", taskID)
+		} else {
+			log.Printf("Reduce task %d timeout, reset to incomplete\n", taskID)
+		} */
+	}
+}
+
 // main/mrcoordinator.go calls Done() periodically to find out
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-
-	return len(c.doneSet) == c.nMap+c.nReduce && c.currentWorkersNum == 0
+	if c.currentWorkerNum > 0 {
+		return false
+	}
+	for _, task := range c.tasks {
+		if task.Status != Complete {
+			return false
+		}
+	}
+	return true
 }
 
 // create a Coordinator.
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
-	// Initialize the coordinator.
 	c := Coordinator{
-		mapTasks:          []MapTask{},
-		reduceTasks:       []ReduceTask{},
-		readySet:          map[int]bool{},
-		processingSet:     map[int]bool{},
-		doneSet:           map[int]bool{},
-		currentWorkersNum: 0,
-		nMap:              len(files),
-		nReduce:           nReduce,
-		mutex:             sync.Mutex{},
+		tasks:            make([]Task, len(files)+nReduce),
+		currentWorkerNum: 0,
+		nMap:             len(files),
+		nReduce:          nReduce,
+		mutex:            sync.Mutex{},
 	}
 
-	// Allocate tasks.
+	// Initialize map and reduce tasks.
 	for i, file := range files {
-		c.mapTasks = append(c.mapTasks, MapTask{
-			MapTaskIndex: i,
-			Filename:     file,
-		})
+		c.tasks[i] = Task{
+			ID:          i,
+			Type:        MapTask,
+			Status:      InComplete,
+			MapFileName: file,
+		}
 	}
-	for i := 0; i < nReduce; i++ {
-		c.reduceTasks = append(c.reduceTasks, ReduceTask{
-			ReduceTaskIndex: i,
-		})
-	}
-
-	// Allocate ready set.
-	for i := 0; i < c.nMap; i++ {
-		c.readySet[i] = true
-	}
-	for i := 0; i < nReduce; i++ {
-		c.readySet[i+c.nMap] = true
+	for i := c.nMap; i < c.nMap+c.nReduce; i++ {
+		c.tasks[i] = Task{
+			ID:     i - c.nMap,
+			Type:   ReduceTask,
+			Status: InComplete,
+		}
 	}
 
-	log.Println("Coordinator initialized.")
-
-	// Start the RPC server.
 	c.server()
 	return &c
 }

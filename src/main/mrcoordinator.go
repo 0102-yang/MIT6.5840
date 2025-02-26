@@ -11,7 +11,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -29,6 +28,6 @@ func main() {
 		time.Sleep(time.Second)
 	}
 
-	log.Println("Coordinator: Coordinator exits due to all tasks done.")
+	// log.Println("Coordinator: Coordinator exits due to all tasks done.")
 	time.Sleep(time.Second)
 }
