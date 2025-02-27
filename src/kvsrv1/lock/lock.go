@@ -1,7 +1,6 @@
 package lock
 
 import (
-	"log"
 	"time"
 
 	"6.5840/kvsrv1/rpc"
@@ -34,11 +33,8 @@ func MakeLock(ck kvtest.IKVClerk, l string) *Lock {
 }
 
 func (lk *Lock) Acquire() {
-	var lockClient string
-	var remoteVersion rpc.Tversion
-	var err rpc.Err
 	for {
-		lockClient, remoteVersion, err = lk.ck.Get(lk.key)
+		lockClient, remoteVersion, err := lk.ck.Get(lk.key)
 		if err == rpc.OK {
 			if lockClient == lk.clientID {
 				// We already have the lock.
@@ -70,21 +66,21 @@ func (lk *Lock) Acquire() {
 }
 
 func (lk *Lock) Release() {
-	lockClient, remoteVersion, err := lk.ck.Get(lk.key)
-	if err != rpc.OK {
-		// Lock is not created yet. Nothing to release.
-		return
-	}
-	if lockClient == lk.clientID {
-		// We have the lock. Release it.
-		err = lk.ck.Put(lk.key, "", remoteVersion)
-		if err == rpc.OK {
+	for {
+		lockClient, remoteVersion, err := lk.ck.Get(lk.key)
+		if err != rpc.OK {
+			// Lock is not created yet. Nothing to release.
 			return
-		} else {
-			log.Fatalln("It is impossible not to release the lock successfully.")
 		}
-	} else {
-		// We don't have the lock. Nothing to release.
-		return
+		if lockClient == lk.clientID {
+			// We have the lock. Release it.
+			err = lk.ck.Put(lk.key, "", remoteVersion)
+			if err == rpc.OK {
+				return
+			}
+		} else {
+			// We don't have the lock. Nothing to release.
+			return
+		}
 	}
 }

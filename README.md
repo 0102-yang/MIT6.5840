@@ -5,7 +5,7 @@ For more details about the course, visit the [course website](https://pdos.csail
 
 ## Lab 1: MapReduce
 
-#### Task(moderate/hard)
+#### Task: Implement MapReduce system (moderate/hard)
 
 In this lab, you will build a MapReduce system. The system includes:
 
@@ -50,7 +50,7 @@ Once the lab is completed and all tests are passed, the key/value service will p
 For concurrent operations, the return values and final state will be the same as if the operations had executed one at a time in some order. Operations are considered concurrent if they overlap in time.
 Linearizability is beneficial for applications because it ensures that the behavior is consistent with a single server processing requests sequentially, making it easier to reason about the system's state.
 
-### Task A: Key/value server with reliable network(easy)
+### Task A: Key/value server with reliable network (easy)
 
 #### Task
 
@@ -98,7 +98,17 @@ Add code to Clerk to retry if doesn't receive a reply.
 
 #### Result
 
-<img src="images/Lab3 Task C Result.png" alt="Task C Result" width="600">
+<img src="images/Lab2 Task C Result.png" alt="Task C Result" width="600">
+
+### Task D: Implementing a lock using key/value clerk and unreliable network (easy)
+
+#### Task
+
+Modify your lock implementation to work correctly with your modified key/value client when the network is not reliable.
+
+#### Result
+
+<img src="images/Lab2 Task D Result.png" alt="Task D Result" width="600">
 
 ## Lab3 Raft
 
