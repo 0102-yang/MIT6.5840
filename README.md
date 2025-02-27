@@ -5,7 +5,7 @@ For more details about the course, visit the [course website](https://pdos.csail
 
 ## Lab 1: MapReduce
 
-### Task
+#### Task
 
 In this lab, you will build a MapReduce system. The system includes:
 
@@ -18,7 +18,8 @@ In this lab, you will build a MapReduce system. The system includes:
 
 This lab is similar to the system described in the MapReduce paper. Note that this lab uses the term "coordinator" instead of the paper's "master".
 
-### Lab1 Test Result:
+#### Result:
+
 <img src="images/Lab1 Test Result.png" alt="Lab1 Test Result" width="600">
 
 ## Lab2: Key/Value Server
@@ -33,12 +34,10 @@ In this lab you will build a key/value server for a single machine that ensures 
 
 The KV server allows clients to interact using a Clerk, which sends RPCs to the server. Clients can perform two types of RPCs: Put(key, value, version) and Get(key).
 
-#### ​Put Operation
-This operation installs or replaces the value for a specific key in the server's in-memory map only if the provided version number matches the server's current version number for that key. If the version numbers match, the server increments the version number. If the version numbers don't match, the server returns rpc.ErrVersion. A new key can be created by calling Put with a version number of 0, resulting in the server storing version 1.
-
-#### Get Operation
-
-This operation fetches the current value and its associated version for a given key. If the key does not exist on the server, the server returns rpc.ErrNoKey.
+- ​Put Operation
+  This operation installs or replaces the value for a specific key in the server's in-memory map only if the provided version number matches the   server's current version number for that key. If the version numbers match, the server increments the version number. If the version numbers don't match, the server returns rpc.ErrVersion. A new key can be created by calling Put with a version number of 0, resulting in the server storing version 1.
+- Get Operation
+  This operation fetches the current value and its associated version for a given key. If the key does not exist on the server, the server returns rpc.ErrNoKey.
 
 #### Versioning and Linearizability
 
@@ -53,13 +52,31 @@ Linearizability is beneficial for applications because it ensures that the behav
 
 ### Task A: Key/value server with reliable network(easy)
 
-#### Target
+#### Task
 
 Your first task is to implement a solution that works when there are no dropped messages. You'll need to add RPC-sending code to the Clerk Put/Get methods in client.go, and implement Put and Get RPC handlers in server.go.
 
 #### Result
 
 <img src="images/Lab2 Task A Result.png" alt="Task A Result" width="600">
+
+### Task B: Implementing a lock using key/value clerk (moderate)
+
+#### Task
+
+In many distributed applications, clients running on different machines use a key/value server to coordinate their activities. For example, ZooKeeper and Etcd allow clients to coordinate using a distributed lock, in analogy with how threads in a Go program can coordinate with locks (i.e., sync.Mutex). Zookeeper and Etcd implement such a lock with conditional put.
+
+In this exercise your task is to implement a lock layered on client Clerk.Put and Clerk.Get calls. The lock supports two methods: Acquire and Release. The lock's specification is that only one client can successfully acquire the lock at a time; other clients must wait until the first client has released the lock using Release.
+
+We supply you with skeleton code and tests in src/kvsrv1/lock/. You will need to modify src/kvsrv1/lock/lock.go. Your Acquire and Release code can talk to your key/value server by calling lk.ck.Put() and lk.ck.Get().
+
+If a client crashes while holding a lock, the lock will never be released. In a design more sophisticated than this lab, the client would attach a lease to a lock. When the lease expires, the lock server would release the lock on behalf of the client. In this lab clients don't crash and you can ignore this problem.
+
+Implement Acquire and Release.
+
+#### Result
+
+<img src="images/Lab2 Task B Result.png" alt="Task B Result" width="600">
 
 ## Lab3 Raft
 

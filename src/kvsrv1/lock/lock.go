@@ -1,7 +1,11 @@
 package lock
 
 import (
-	"6.5840/kvtest1"
+	"log"
+	"time"
+
+	"6.5840/kvsrv1/rpc"
+	kvtest "6.5840/kvtest1"
 )
 
 type Lock struct {
@@ -11,6 +15,8 @@ type Lock struct {
 	// MakeLock().
 	ck kvtest.IKVClerk
 	// You may add code here
+	key      string
+	clientID string
 }
 
 // The tester calls MakeLock() and passes in a k/v clerk; your code can
@@ -19,15 +25,66 @@ type Lock struct {
 // Use l as the key to store the "lock state" (you would have to decide
 // precisely what the lock state is).
 func MakeLock(ck kvtest.IKVClerk, l string) *Lock {
-	lk := &Lock{ck: ck}
-	// You may add code here
+	lk := &Lock{
+		ck:       ck,
+		key:      l,
+		clientID: kvtest.RandValue(8),
+	}
 	return lk
 }
 
 func (lk *Lock) Acquire() {
-	// Your code here
+	var lockClient string
+	var remoteVersion rpc.Tversion
+	var err rpc.Err
+	for {
+		lockClient, remoteVersion, err = lk.ck.Get(lk.key)
+		if err == rpc.OK {
+			if lockClient == lk.clientID {
+				// We already have the lock.
+				return
+			} else if lockClient == "" {
+				// No one has the lock.
+				err = lk.ck.Put(lk.key, lk.clientID, remoteVersion)
+				if err == rpc.OK {
+					return
+				} else {
+					// Lock information is modified by other client. Retry.
+					continue
+				}
+			} else {
+				// Other client has the lock. Wait for it to release.
+				time.Sleep(10 * time.Millisecond)
+			}
+		} else {
+			// Lock is not created yet. Create it.
+			err = lk.ck.Put(lk.key, lk.clientID, 0)
+			if err == rpc.OK {
+				return
+			} else {
+				// Lock is created by other client. Retry.
+				continue
+			}
+		}
+	}
 }
 
 func (lk *Lock) Release() {
-	// Your code here
+	lockClient, remoteVersion, err := lk.ck.Get(lk.key)
+	if err != rpc.OK {
+		// Lock is not created yet. Nothing to release.
+		return
+	}
+	if lockClient == lk.clientID {
+		// We have the lock. Release it.
+		err = lk.ck.Put(lk.key, "", remoteVersion)
+		if err == rpc.OK {
+			return
+		} else {
+			log.Fatalln("It is impossible not to release the lock successfully.")
+		}
+	} else {
+		// We don't have the lock. Nothing to release.
+		return
+	}
 }
