@@ -5,7 +5,7 @@ For more details about the course, visit the [course website](https://pdos.csail
 
 ## Lab 1: MapReduce
 
-#### Task
+#### Task(moderate/hard)
 
 In this lab, you will build a MapReduce system. The system includes:
 
@@ -77,6 +77,28 @@ Implement Acquire and Release.
 #### Result
 
 <img src="images/Lab2 Task B Result.png" alt="Task B Result" width="600">
+
+### Task C: Key/value server with dropped messages (moderate)
+
+#### Task
+
+The main challenge in this exercise is that the network may re-order, delay, or discard RPC requests and/or replies. To recover from discarded requests/replies, the Clerk must keep re-trying each RPC until it receives a reply from the server.
+
+If the network discards an RPC request message, then the client re-sending the request will solve the problem: the server will receive and execute just the re-sent request.
+
+However, the network might instead discard an RPC reply message. The client does not know which message was discarded; the client only observes that it received no reply. If it was the reply that was discarded, and the client re-sends the RPC request, then the server will receive two copies of the request. That's OK for a Get, since Get doesn't modify the server state. It is safe to resend a Put RPC with the same version number, since the server executes Put conditionally on the version number; if the server received and executed a Put RPC, it will respond to a re-transmitted copy of that RPC with rpc.ErrVersion rather than executing the Put a second time.
+
+A tricky case is if the server replies with an rpc.ErrVersion in a response to an RPC that the Clerk retried. In this case, the Clerk cannot know if the Clerk's Put was executed by the server or not: the first RPC might have been executed by the server but the network may have discarded the successful response from the server, so that the server sent rpc.ErrVersion only for the retransmitted RPC. Or, it might be that another Clerk updated the key before the Clerk's first RPC arrived at the server, so that the server executed neither of the Clerk's RPCs and replied rpc.ErrVersion to both. Therefore, if a Clerk receives rpc.ErrVersion for a retransmitted Put RPC, Clerk.Put must return rpc.ErrMaybe to the application instead of rpc.ErrVersion since the request may have been executed. It is then up to the application to handle this case. If the server responds to an initial (not retransmitted) Put RPC with rpc.ErrVersion, then the Clerk should return rpc.ErrVersion to the application, since the RPC was definitely not executed by the server.
+
+It would be more convenient for application developers if Put's were exactly-once (i.e., no rpc.ErrMaybe errors) but that is difficult to guarantee without maintaining state at the server for each Clerk. In the last exercise of this lab, you will implement a lock using your Clerk to explore how to program with at-most-once Clerk.Put.
+
+Now you should modify your kvsrv1/client.go to continue in the face of dropped RPC requests and replies. A return value of true from the client's ck.clnt.Call() indicates that the client received an RPC reply from the server; a return value of false indicates that it did not receive a reply (more precisely, Call() waits for a reply message for a timeout interval, and returns false if no reply arrives within that time). Your Clerk should keep re-sending an RPC until it receives a reply. Keep in mind the discussion of rpc.ErrMaybe above. Your solution shouldn't require any changes to the server.
+
+Add code to Clerk to retry if doesn't receive a reply.
+
+#### Result
+
+<img src="images/Lab3 Task C Result.png" alt="Task C Result" width="600">
 
 ## Lab3 Raft
 

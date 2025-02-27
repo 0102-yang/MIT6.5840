@@ -42,8 +42,10 @@ func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
 		reply.Value = value
 		reply.Version = kv.versionStore[args.Key]
 		reply.Err = rpc.OK
+		DPrintf("Server: Get key: %s value: %s with version %d", args.Key, value, reply.Version)
 	} else {
 		reply.Err = rpc.ErrNoKey
+		DPrintf("Server: Get key: %s not found", args.Key)
 	}
 }
 
@@ -59,12 +61,19 @@ func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
 		// Key exists.
 		version := kv.versionStore[args.Key]
 		if args.Version != version {
+			DPrintf("Server: Put version mismatch key: %s expected version %d got %d", args.Key, version, args.Version)
 			reply.Err = rpc.ErrVersion
 		} else {
-			kv.kvStore[args.Key] = args.Value
+			if args.Value == kv.kvStore[args.Key] {
+				// No change in value.
+				DPrintf("Server: Put no change in value %s: %s", args.Key, args.Value)
+			} else {
+				// Replace the value.
+				kv.kvStore[args.Key] = args.Value
+				DPrintf("Server: Put replace key: %s with new value: %s with version %d", args.Key, args.Value, version)
+			}
 			kv.versionStore[args.Key]++
 			reply.Err = rpc.OK
-			DPrintf("Put replace %s: %s with version %d", args.Key, args.Value, version)
 		}
 	} else {
 		// Key doesn't exist.
@@ -73,7 +82,7 @@ func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
 			kv.kvStore[args.Key] = args.Value
 			kv.versionStore[args.Key] = 1
 			reply.Err = rpc.OK
-			DPrintf("Put install %s: %s", args.Key, args.Value)
+			DPrintf("Server: Put install new key: %s value: %s", args.Key, args.Value)
 		} else {
 			reply.Err = rpc.ErrNoKey
 		}

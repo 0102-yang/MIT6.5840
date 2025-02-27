@@ -1,6 +1,8 @@
 package kvsrv
 
 import (
+	"time"
+
 	"6.5840/kvsrv1/rpc"
 	kvtest "6.5840/kvtest1"
 	tester "6.5840/tester1"
@@ -30,11 +32,21 @@ func MakeClerk(clnt *tester.Clnt, server string) kvtest.IKVClerk {
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 	args := &rpc.GetArgs{Key: key}
 	reply := &rpc.GetReply{}
-	ok := ck.clnt.Call(ck.server, "KVServer.Get", args, reply)
-	if ok && reply.Err == rpc.OK {
+	retry_count := 0
+	for {
+		ok := ck.clnt.Call(ck.server, "KVServer.Get", args, reply)
+		if !ok {
+			// Network error, retry.
+			DPrintf("Client: network error, retrying")
+			retry_count++
+			time.Sleep(time.Duration(100*retry_count) * time.Millisecond)
+			continue
+		}
+		if reply.Err == rpc.ErrNoKey {
+			return "", 0, rpc.ErrNoKey
+		}
 		return reply.Value, reply.Version, rpc.OK
 	}
-	return "", 0, rpc.ErrNoKey
 }
 
 // Put updates key with value only if the version in the
@@ -57,9 +69,20 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 func (ck *Clerk) Put(key, value string, version rpc.Tversion) rpc.Err {
 	args := &rpc.PutArgs{Key: key, Value: value, Version: version}
 	reply := &rpc.PutReply{}
-	ok := ck.clnt.Call(ck.server, "KVServer.Put", args, reply)
-	if ok && reply.Err == rpc.OK {
-		return rpc.OK
+	retry_count := 0
+	for {
+		ok := ck.clnt.Call(ck.server, "KVServer.Put", args, reply)
+		if !ok {
+			// Network error, retry.
+			DPrintf("Client: network error, retrying")
+			retry_count++
+			time.Sleep(time.Duration(100*retry_count) * time.Millisecond)
+			continue
+		}
+		if retry_count == 0 {
+			return reply.Err
+		} else {
+			return rpc.ErrMaybe
+		}
 	}
-	return reply.Err
 }
