@@ -112,19 +112,29 @@ Modify your lock implementation to work correctly with your modified key/value c
 
 ## Lab3 Raft
 
-This is the first lab in a series where we build a fault-tolerant key/value storage system. In this lab, we implement Raft, a replicated state machine protocol. Future labs will build a key/value service on top of Raft and shard the service for higher performance.
+This lab is the first step in building a fault-tolerant key/value storage system using Raft, a replicated state machine protocol. The goal is to implement Raft as a Go object type with associated methods, which will be used as a module in a larger service. Raft ensures that all replica servers maintain the same log of client requests, which are executed in the same order on each replica, thus maintaining identical service states. The implementation will focus on log replication, leader election, and persistent state storage, following the design outlined in the extended Raft paper. The lab will be completed in four parts, each due on a specific date.
 
-### Replicated Service
+#### Replicated Service
 
 A replicated service stores complete copies of its state on multiple servers for fault tolerance. This allows the service to operate despite server failures. However, failures may cause replicas to hold differing data copies.
 
-### Raft Protocol
+#### Raft Protocol
 
 Raft organizes client requests into a log sequence, ensuring all replicas see the same log. Each replica executes client requests in log order, maintaining identical service state. If a server recovers from failure, Raft updates its log. Raft operates as long as a majority of servers are alive and communicative.
 
-### Lab Goals
+#### Lab Goals
 In this lab, implement Raft as a Go object type with methods, to be used as a module in a larger service. Raft instances communicate via RPC to maintain replicated logs. Your Raft interface will support an indefinite sequence of numbered log entries. Once a log entry is committed, Raft sends it to the larger service for execution.
 
 Follow the design in the extended Raft paper, particularly Figure 2. Implement most of the paper's content, including saving persistent state and reading it after a node restarts. Do not implement cluster membership changes (Section 6).
 
 This lab is due in four parts, each with a corresponding due date.
+
+### Part 3A: leader election (moderate)
+
+#### Task
+
+Implement Raft leader election and heartbeats (AppendEntries RPCs with no log entries). The goal for Part 3A is for a single leader to be elected, for the leader to remain the leader if there are no failures, and for a new leader to take over if the old leader fails or if packets to/from the old leader are lost. 
+
+#### Result
+
+<img src="images/Lab3 Part 3A Result.png" alt="Part 3A Result" width="600">
