@@ -1,10 +1,11 @@
 {
     "name": "MIT6.5840",
-    "image": "mcr.microsoft.com/devcontainers/go:dev-1.23-bookworm",
+    "image": "mcr.microsoft.com/devcontainers/go:dev-1.24-bookworm",
     "customizations": {
         "vscode": {
             "extensions": [
-                "golang.Go"
+                "golang.Go",
+                "GitHub.copilot"
             ]
         },
         "settings": {
@@ -17,6 +18,12 @@
     },
     "forwardPorts": [
         8080
+    ],
+    "runArgs": [
+        "--cap-add=SYS_PTRACE",
+        "--security-opt=seccomp=unconfined",
+        "--name",
+        "mit6.5840-dev"
     ],
     "remoteUser": "vscode"
 }
