@@ -1,8 +1,8 @@
 # This is the Makefile helping you submit the labs.
 # Submit your lab with the following command:
-#     $ make [lab1|lab2|lab3a|lab3b|lab3c|lab3d|lab4a|lab4b|lab5a|lab5b]
+#     $ make [lab1|lab2|lab3a|lab3b|lab3c|lab3d|lab4a|lab4b|lab4c|lab5a|lab5b|lab5c]
 
-LABS=" lab1 lab2 lab3a lab3b lab3c lab3d lab4a lab4b lab5a lab5b "
+LABS=" lab1 lab2 lab3a lab3b lab3c lab3d lab4a lab4b lab4c lab5a lab5b lab5c "
 
 %: check-%
 	@echo "Preparing $@-handin.tar.gz"
@@ -30,4 +30,8 @@ LABS=" lab1 lab2 lab3a lab3b lab3c lab3d lab4a lab4b lab5a lab5b "
 .PHONY: check-%
 check-%:
 	@echo "Checking that your submission builds correctly..."
+<<<<<<< HEAD
 	@./.check-build git://g.csail.mit.edu/6.5840-golabs-2025 $(patsubst check-%,%,$@)
+=======
+	@./.check-build git://g.csail.mit.edu/6.5840-golabs-2026 $(patsubst check-%,%,$@)
+>>>>>>> 2026-project-repository/master

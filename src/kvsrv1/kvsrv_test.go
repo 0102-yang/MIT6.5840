@@ -1,13 +1,12 @@
 package kvsrv
 
 import (
-	// "log"
-	"runtime"
+	//"log"
 	"testing"
 	"time"
 
 	"6.5840/kvsrv1/rpc"
-	"6.5840/kvtest1"
+	kvtest "6.5840/kvtest1"
 )
 
 // Test Put with a single client and a reliable network
@@ -63,14 +62,14 @@ func TestPutConcurrentReliable(t *testing.T) {
 		return ts.OneClientPut(me, ck, []string{"k"}, done)
 	})
 	ck := ts.MakeClerk()
-	ts.CheckPutConcurrent(ck, "k", rs, &kvtest.ClntRes{})
+	ts.CheckPutConcurrent(ck, "k", rs, &kvtest.ClntRes{}, ts.IsReliable())
 	ts.CheckPorcupineT(PORCUPINETIME)
 }
 
 // Check if memory used on server is reasonable
 func TestMemPutManyClientsReliable(t *testing.T) {
 	const (
-		NCLIENT = 100_000
+		NCLIENT = 20_000
 		MEM     = 1000
 	)
 
@@ -96,12 +95,7 @@ func TestMemPutManyClientsReliable(t *testing.T) {
 	// allow threads started by labrpc to start
 	time.Sleep(1 * time.Second)
 
-	runtime.GC()
-	runtime.GC()
-
-	var st runtime.MemStats
-	runtime.ReadMemStats(&st)
-	m0 := st.HeapAlloc
+	m0 := ts.Config.Group(0).MemSize()
 
 	for i := 0; i < NCLIENT; i++ {
 		if err := cks[i].Put("k", v, rpc.Tversion(i)); err != rpc.OK {
@@ -109,15 +103,10 @@ func TestMemPutManyClientsReliable(t *testing.T) {
 		}
 	}
 
-	runtime.GC()
-	time.Sleep(1 * time.Second)
-	runtime.GC()
-
-	runtime.ReadMemStats(&st)
-	m1 := st.HeapAlloc
+	m1 := ts.Config.Group(0).MemSize()
 	f := (float64(m1) - float64(m0)) / NCLIENT
-	if m1 > m0+(NCLIENT*200) {
-		t.Fatalf("error: server using too much memory %d %d (%.2f per client)\n", m0, m1, f)
+	if m1 > m0+(NCLIENT*10) {
+		t.Fatalf("error: server using too much memory %d %d (%.2f byte per client)\n", m0, m1, f)
 	}
 }
 

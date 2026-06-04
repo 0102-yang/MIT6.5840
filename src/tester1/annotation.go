@@ -1,15 +1,16 @@
 package tester
 
 import (
-	"sync"
+	"fmt"
 	"os"
 	"os/signal"
-	"fmt"
-	"time"
-	"strings"
 	"slices"
+	"strings"
+	"sync"
+	"time"
+
+	models "6.5840/models1"
 	"github.com/anishathalye/porcupine"
-	"6.5840/models1"
 )
 
 ///
@@ -20,6 +21,7 @@ type Annotation struct {
 	mu          *sync.Mutex
 	annotations []porcupine.Annotation
 	continuous  map[string]Continuous
+	finalized   bool
 }
 
 type Continuous struct {
@@ -51,6 +53,10 @@ type CheckerBegin struct {
 // running multiple test cases, some zombie threads in previous test cases could
 // interfere the current one. An ad-hoc fix at the user level would be adding
 // annotations only if the killed flag on the server is not set.
+//
+// TODO: Now that we've switched to the new "running tester and each raft server
+// in a separate process" model, we should make it local (since we already have
+// a global in annotator.go).
 var annotation *Annotation = mkAnnotation()
 var unit struct{} = captureSignal()
 var finfo *FrameworkInfo
@@ -70,8 +76,21 @@ const (
 	TAG_INFO      string = "$ Test Info"
 )
 
-func (cfg *Config) RetrieveAnnotations() []porcupine.Annotation{
-	annotations := annotation.retrieve()
+func FinalizeAnnotations(end string) []porcupine.Annotation {
+	annotations := annotation.finalize()
+
+	t := timestamp()
+	aend := porcupine.Annotation{
+		Tag:             TAG_INFO,
+		Start:           t,
+		Description:     end,
+		Details:         end,
+		BackgroundColor: COLOR_INFO,
+	}
+	annotation.mu.Lock()
+	annotations = append(annotations, aend)
+	annotation.mu.Unlock()
+
 	return annotations
 }
 
@@ -101,7 +120,7 @@ func AnnotateContinuousEnd(tag string) {
 
 // Used by users.
 
-func Annotate(tag, desp, details string) {
+func AnnotatePoint(tag, desp, details string) {
 	annotation.annotatePointColor(tag, desp, details, COLOR_USER)
 }
 
@@ -136,7 +155,7 @@ func AnnotateCheckerBegin(details string) {
 	defer finfo.mu.Unlock()
 
 	finfo.ckbegin = CheckerBegin{
-		ts: timestamp(),
+		ts:      timestamp(),
 		details: details,
 	}
 }
@@ -173,11 +192,38 @@ func AnnotateCheckerNeutral(desp, details string) {
 	AnnotateCheckerEnd(desp, details, COLOR_NEUTRAL)
 }
 
+func SetAnnotationFinalized() {
+	annotation.mu.Lock()
+	defer annotation.mu.Unlock()
+
+	annotation.finalized = true
+}
+
+func (an *Annotation) isFinalized() bool {
+	annotation.mu.Lock()
+	defer annotation.mu.Unlock()
+
+	return annotation.finalized
+}
+
+func GetAnnotationFinalized() bool {
+	return annotation.isFinalized()
+}
+
 // Used before log.Fatalf
 func AnnotateCheckerFailureBeforeExit(desp, details string) {
 	AnnotateCheckerFailure(desp, details)
 	annotation.cleanup(true, "test failed")
 }
+
+// The current annotation API for failures is very hacky. We really should have
+// just one function that reads the current network/server status. For network,
+// we should be able to read whether an endname is enabled. However, if the
+// endname is enabled from X to Y, but not Y to X, the annotation would be
+// downright confusing. A better design (in the tester framework, not in the
+// annotation layer) is to have a single boolean for each pair of servers; once
+// we have such state, the annotation can then simply read the booleans to
+// determine the network partitions.
 
 // Two functions to annotate partitions: AnnotateConnection and
 // AnnotateTwoPartitions. The connected field of ServerGrp (in group.go) is
@@ -199,7 +245,7 @@ func AnnotateConnection(connection []bool) {
 
 func annotateFault() {
 	trues := make([]bool, finfo.nservers)
-	for id := range(trues) {
+	for id := range trues {
 		trues[id] = true
 	}
 	falses := make([]bool, finfo.nservers)
@@ -215,7 +261,7 @@ func annotateFault() {
 	crashes := make([]int, 0)
 	var builder strings.Builder
 	builder.WriteString("partition = ")
-	for id, connected := range(finfo.connected) {
+	for id, connected := range finfo.connected {
 		if finfo.crashed[id] {
 			crashes = append(crashes, id)
 			continue
@@ -236,12 +282,29 @@ func annotateFault() {
 	AnnotateContinuousColor(TAG_PARTITION, text, text, COLOR_FAULT)
 }
 
+// Currently this API does not work with failed servers, nor with the connected
+// fields of ServerGrp (in group.go). It is used specifically for
+// ServerGrp.Partition.
 func AnnotateTwoPartitions(p1 []int, p2 []int) {
 	// A bit hard to check whether the partition actually changes, so just
 	// annotate on every invocation.
-	// TODO
-	text := fmt.Sprintf("%v %v", p1, p2)
+	text := fmt.Sprintf("partition = %v %v", p1, p2)
 	AnnotateContinuousColor(TAG_PARTITION, text, text, COLOR_FAULT)
+}
+
+func AnnotateClearFailure() {
+	finfo.mu.Lock()
+	defer finfo.mu.Unlock()
+
+	for id := range finfo.crashed {
+		finfo.crashed[id] = false
+	}
+
+	for id := range finfo.connected {
+		finfo.connected[id] = true
+	}
+
+	AnnotateContinuousEnd(TAG_PARTITION)
 }
 
 func AnnotateShutdown(servers []int) {
@@ -249,7 +312,7 @@ func AnnotateShutdown(servers []int) {
 	defer finfo.mu.Unlock()
 
 	changed := false
-	for _, id := range(servers) {
+	for _, id := range servers {
 		if !finfo.crashed[id] {
 			changed = true
 		}
@@ -270,7 +333,7 @@ func AnnotateShutdownAll() {
 	finfo.mu.Unlock()
 
 	servers := make([]int, n)
-	for i := range(servers) {
+	for i := range servers {
 		servers[i] = i
 	}
 	AnnotateShutdown(servers)
@@ -281,7 +344,7 @@ func AnnotateRestart(servers []int) {
 	defer finfo.mu.Unlock()
 
 	changed := false
-	for _, id := range(servers) {
+	for _, id := range servers {
 		if finfo.crashed[id] {
 			changed = true
 		}
@@ -302,7 +365,7 @@ func AnnotateRestartAll() {
 	finfo.mu.Unlock()
 
 	servers := make([]int, n)
-	for i := range(servers) {
+	for i := range servers {
 		servers[i] = i
 	}
 	AnnotateRestart(servers)
@@ -316,24 +379,27 @@ func timestamp() int64 {
 	return int64(time.Since(time.Unix(0, 0)))
 }
 
-func (an *Annotation) retrieve() []porcupine.Annotation {
+func (an *Annotation) finalize() []porcupine.Annotation {
 	an.mu.Lock()
-	x := an.annotations
+	defer an.mu.Unlock()
+
+	x := make([]porcupine.Annotation, len(an.annotations))
+	copy(x, an.annotations)
+
 	t := timestamp()
-	for tag, cont := range(an.continuous) {
+	for tag, cont := range an.continuous {
 		a := porcupine.Annotation{
-			Tag: tag,
-			Start: cont.start,
-			End: t,
-			Description: cont.desp,
-			Details: cont.details,
+			Tag:             tag,
+			Start:           cont.start,
+			End:             t,
+			Description:     cont.desp,
+			Details:         cont.details,
 			BackgroundColor: cont.bgcolor,
 		}
 		x = append(x, a)
 	}
-	an.annotations = make([]porcupine.Annotation, 0)
-	an.continuous = make(map[string]Continuous)
-	an.mu.Unlock()
+
+	an.finalized = true
 	return x
 }
 
@@ -341,6 +407,7 @@ func (an *Annotation) clear() {
 	an.mu.Lock()
 	an.annotations = make([]porcupine.Annotation, 0)
 	an.continuous = make(map[string]Continuous)
+	an.finalized = false
 	an.mu.Unlock()
 }
 
@@ -350,10 +417,10 @@ func (an *Annotation) annotatePointColor(
 	an.mu.Lock()
 	t := timestamp()
 	a := porcupine.Annotation{
-		Tag: tag,
-		Start: t,
-		Description: desp,
-		Details: details,
+		Tag:             tag,
+		Start:           t,
+		Description:     desp,
+		Details:         details,
 		BackgroundColor: bgcolor,
 	}
 	an.annotations = append(an.annotations, a)
@@ -365,11 +432,11 @@ func (an *Annotation) annotateIntervalColor(
 ) {
 	an.mu.Lock()
 	a := porcupine.Annotation{
-		Tag: tag,
-		Start: start,
-		End: timestamp(),
-		Description: desp,
-		Details: details,
+		Tag:             tag,
+		Start:           start,
+		End:             timestamp(),
+		Description:     desp,
+		Details:         details,
 		BackgroundColor: bgcolor,
 	}
 	an.annotations = append(an.annotations, a)
@@ -387,8 +454,8 @@ func (an *Annotation) annotateContinuousColor(
 		// The first continuous annotation for tag. Simply add it to the
 		// continuous map.
 		an.continuous[tag] = Continuous{
-			start: timestamp(),
-			desp: desp,
+			start:   timestamp(),
+			desp:    desp,
 			details: details,
 			bgcolor: bgcolor,
 		}
@@ -399,21 +466,17 @@ func (an *Annotation) annotateContinuousColor(
 	// annotation and add this one to the continuous map.
 	t := timestamp()
 	aprev := porcupine.Annotation{
-		Tag: tag,
-		Start: cont.start,
-		End: t,
-		Description: cont.desp,
-		Details: cont.details,
+		Tag:             tag,
+		Start:           cont.start,
+		End:             t,
+		Description:     cont.desp,
+		Details:         cont.details,
 		BackgroundColor: cont.bgcolor,
 	}
 	an.annotations = append(an.annotations, aprev)
 	an.continuous[tag] = Continuous{
-		// XXX: If the start timestamp of an event is too closer to the end
-		// timestamp of another event, Porcupine seems to overlap the two
-		// events. We add a delta (1000) as a workaround, but remove this once
-		// this issue is resolved.
-		start: t + 1000,
-		desp: desp,
+		start:   t,
+		desp:    desp,
 		details: details,
 		bgcolor: bgcolor,
 	}
@@ -432,11 +495,11 @@ func (an *Annotation) annotateContinuousEnd(tag string) {
 	// End the on-going continuous annotation for tag.
 	t := timestamp()
 	aprev := porcupine.Annotation{
-		Tag: tag,
-		Start: cont.start,
-		End: t,
-		Description: cont.desp,
-		Details: cont.details,
+		Tag:             tag,
+		Start:           cont.start,
+		End:             t,
+		Description:     cont.desp,
+		Details:         cont.details,
 		BackgroundColor: cont.bgcolor,
 	}
 	an.annotations = append(an.annotations, aprev)
@@ -445,29 +508,27 @@ func (an *Annotation) annotateContinuousEnd(tag string) {
 
 func (an *Annotation) cleanup(failed bool, end string) {
 	enabled := os.Getenv("VIS_ENABLE")
-	if enabled == "never" || (!failed && enabled != "always") {
+	if enabled == "never" || (!failed && enabled != "always") || an.isFinalized() {
 		// Simply clean up the annotations without producing the vis file if
-		// VIS_ENABLE is set to "never", or if the test passes and VIS_ENABLE is
-		// not set to "always".
+		// VIS_ENABLE is set to "never", OR if the test passes AND VIS_ENABLE is
+		// not set to "always", OR the current test has already been finalized
+		// (because CheckPorcupine has already produced a vis file).
 		an.clear()
 		return
 	}
 
-	annotations := an.retrieve()
+	annotations := an.finalize()
 	if len(annotations) == 0 {
 		// Skip empty annotations.
 		return
 	}
 
-	// XXX: Make the last annotation a interval one to work around Porcupine's
-	// issue. Consider removing this once the issue is fixed.
 	t := timestamp()
 	aend := porcupine.Annotation{
-		Tag: TAG_INFO,
-		Start: t,
-		End: t + 1000,
-		Description: end,
-		Details: end,
+		Tag:             TAG_INFO,
+		Start:           t,
+		Description:     end,
+		Details:         end,
 		BackgroundColor: COLOR_INFO,
 	}
 	annotations = append(annotations, aend)
@@ -479,7 +540,7 @@ func (an *Annotation) cleanup(failed bool, end string) {
 		// Save the vis file in a temporary file.
 		file, err = os.CreateTemp("", "porcupine-*.html")
 	} else {
-		file, err = os.OpenFile(fpath, os.O_RDWR | os.O_CREATE | os.O_TRUNC, 0644)
+		file, err = os.OpenFile(fpath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	}
 	if err != nil {
 		fmt.Printf("info: failed to open visualization file %s (%v)\n", fpath, err)
@@ -496,9 +557,10 @@ func (an *Annotation) cleanup(failed bool, end string) {
 
 func mkAnnotation() *Annotation {
 	an := Annotation{
-		mu: new(sync.Mutex),
+		mu:          new(sync.Mutex),
 		annotations: make([]porcupine.Annotation, 0),
-		continuous: make(map[string]Continuous),
+		continuous:  make(map[string]Continuous),
+		finalized:   false,
 	}
 
 	return &an
@@ -506,15 +568,15 @@ func mkAnnotation() *Annotation {
 
 func mkFrameworkInfo(nservers int) *FrameworkInfo {
 	conn := make([]bool, nservers)
-	for id := range(conn) {
+	for id := range conn {
 		conn[id] = true
 	}
 
 	finfo := FrameworkInfo{
-		mu: new(sync.Mutex),
-		nservers: nservers,
+		mu:        new(sync.Mutex),
+		nservers:  nservers,
 		connected: conn,
-		crashed: make([]bool, nservers),
+		crashed:   make([]bool, nservers),
 	}
 
 	return &finfo
@@ -524,7 +586,7 @@ func captureSignal() struct{} {
 	// Capture SIGINT to visualize on interruption.
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
-	go func(){
+	go func() {
 		for range c {
 			annotation.cleanup(true, "interrupted")
 			os.Exit(1)

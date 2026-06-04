@@ -128,15 +128,13 @@ func (c *Coordinator) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) e
 }
 
 // start a thread that listens for RPCs from worker.go
-func (c *Coordinator) server() {
+func (c *Coordinator) server(sockname string) {
 	rpc.Register(c)
 	rpc.HandleHTTP()
-	//l, e := net.Listen("tcp", ":1234")
-	sockname := coordinatorSock()
 	os.Remove(sockname)
 	l, e := net.Listen("unix", sockname)
 	if e != nil {
-		log.Fatal("listen error:", e)
+		log.Fatalf("listen error %s: %v", sockname, e)
 	}
 	go http.Serve(l, nil)
 }
@@ -179,7 +177,7 @@ func (c *Coordinator) Done() bool {
 // create a Coordinator.
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
-func MakeCoordinator(files []string, nReduce int) *Coordinator {
+func MakeCoordinator(sockname string, files []string, nReduce int) *Coordinator {
 	c := Coordinator{
 		tasks:            make([]Task, len(files)+nReduce),
 		currentWorkerNum: 0,
@@ -205,6 +203,6 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 		}
 	}
 
-	c.server()
+	c.server(sockname)
 	return &c
 }

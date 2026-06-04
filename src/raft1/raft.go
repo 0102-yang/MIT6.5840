@@ -1,14 +1,14 @@
 package raft
 
-// The file raftapi/raft.go defines the interface that raft must
+// The file ../raftapi/raftapi.go defines the interface that raft must
 // expose to servers (or the tester), but see comments below for each
 // of these functions for more details.
 //
-// Make() creates a new raft peer that implements the raft interface.
+// In addition,  Make() creates a new raft peer that implements the
+// raft interface.
 
 import (
 	//	"bytes"
-
 	"context"
 	"math/rand"
 	"sync"
@@ -229,7 +229,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	term := -1
 	isLeader := true
 
-	// Your code here (3B).0
+	// Your code here (3B).
 
 	return index, term, isLeader
 }
@@ -366,8 +366,11 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
-	// Start election and send heartbeats.
-	go rf.ticker()
+	// start ticker goroutine to start elections
+	go rf.tryStartReElection()
+
+	// start ticker goroutine to send heartbeats
+	go rf.trySendHeartbeats()
 
 	return rf
 }

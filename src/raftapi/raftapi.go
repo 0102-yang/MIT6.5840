@@ -13,21 +13,15 @@ type Raft interface {
 	// For Snaphots (3D)
 	Snapshot(index int, snapshot []byte)
 	PersistBytes() int
-
-	// For the tester to indicate to your code that is should cleanup
-	// any long-running go routines.
-	Kill()
 }
 
 // As each Raft peer becomes aware that successive log entries are
-// committed, the peer should send an ApplyMsg to the service (or
-// tester) on the same server, via the applyCh passed to Make(). set
-// CommandValid to true to indicate that the ApplyMsg contains a newly
-// committed log entry.
+// committed, the peer should send an ApplyMsg to the server (or
+// tester), via the applyCh passed to Make(). Set CommandValid to true
+// to indicate that the ApplyMsg contains a newly committed log entry.
 //
-// In Lab 3 you'll want to send other kinds of messages (e.g.,
-// snapshots) on the applyCh; at that point you can add fields to
-// ApplyMsg, but set CommandValid to false for these other uses.
+// You'll find the Snapshot fields useful later in the lab.
+// Exactly one of CommandValid and SnapshotValid should be true.
 type ApplyMsg struct {
 	CommandValid bool
 	Command      interface{}

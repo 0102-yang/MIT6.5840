@@ -4,8 +4,8 @@ import (
 	// "log"
 	"testing"
 
-	"6.5840/kvtest1"
-	"6.5840/tester1"
+	kvtest "6.5840/kvtest1"
+	tester "6.5840/tester1"
 )
 
 type TestKV struct {
@@ -15,7 +15,7 @@ type TestKV struct {
 }
 
 func MakeTestKV(t *testing.T, reliable bool) *TestKV {
-	cfg := tester.MakeConfig(t, 1, reliable, StartKVServer)
+	cfg := tester.MakeConfig(t, 1, reliable, "kvsrv1d", []string{})
 	ts := &TestKV{
 		t:        t,
 		reliable: reliable,
@@ -27,7 +27,7 @@ func MakeTestKV(t *testing.T, reliable bool) *TestKV {
 func (ts *TestKV) MakeClerk() kvtest.IKVClerk {
 	clnt := ts.Config.MakeClient()
 	ck := MakeClerk(clnt, tester.ServerName(tester.GRP0, 0))
-	return &kvtest.TestClerk{ck, clnt}
+	return &kvtest.TestClerk{ck, clnt, ts.Test.Config}
 }
 
 func (ts *TestKV) DeleteClerk(ck kvtest.IKVClerk) {

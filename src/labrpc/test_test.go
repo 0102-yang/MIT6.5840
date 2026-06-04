@@ -1,11 +1,13 @@
 package labrpc
 
-import "testing"
-import "strconv"
-import "sync"
-import "runtime"
-import "time"
-import "fmt"
+import (
+	"fmt"
+	"runtime"
+	"strconv"
+	"sync"
+	"testing"
+	"time"
+)
 
 type JunkArgs struct {
 	X int
@@ -140,9 +142,7 @@ func TestTypes(t *testing.T) {
 	}
 }
 
-//
 // does net.Enable(endname, false) really disconnect a client?
-//
 func TestDisconnect(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 
@@ -179,9 +179,7 @@ func TestDisconnect(t *testing.T) {
 	}
 }
 
-//
 // test net.GetCount()
-//
 func TestCounts(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 
@@ -215,9 +213,7 @@ func TestCounts(t *testing.T) {
 	}
 }
 
-//
 // test net.GetTotalBytes()
-//
 func TestBytes(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 
@@ -269,9 +265,7 @@ func TestBytes(t *testing.T) {
 	}
 }
 
-//
 // test RPCs from concurrent ClientEnds
-//
 func TestConcurrentMany(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 
@@ -327,9 +321,7 @@ func TestConcurrentMany(t *testing.T) {
 	}
 }
 
-//
 // test unreliable
-//
 func TestUnreliable(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 
@@ -380,9 +372,7 @@ func TestUnreliable(t *testing.T) {
 	}
 }
 
-//
 // test concurrent RPCs from a single ClientEnd
-//
 func TestConcurrentOne(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 
@@ -441,10 +431,8 @@ func TestConcurrentOne(t *testing.T) {
 	}
 }
 
-//
 // regression: an RPC that's delayed during Enabled=false
 // should not delay subsequent RPCs (e.g. after Enabled=true).
-//
 func TestRegression1(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 
@@ -515,11 +503,9 @@ func TestRegression1(t *testing.T) {
 	}
 }
 
-//
 // if an RPC is stuck in a server, and the server
 // is killed with DeleteServer(), does the RPC
 // get un-stuck?
-//
 func TestKilled(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 
@@ -594,4 +580,50 @@ func TestBenchmark(t *testing.T) {
 	}
 	fmt.Printf("%v for %v\n", time.Since(t0), n)
 	// march 2016, rtm laptop, 22 microseconds per RPC
+}
+
+// regression: a race between write of rn.longDelays in LongDelays()
+// and a read in processReq().
+func TestLongDelayRace(t *testing.T) {
+	runtime.GOMAXPROCS(4)
+
+	rn := MakeNetwork()
+	defer rn.Cleanup()
+
+	e := rn.MakeEnd("end1-99")
+
+	js := &JunkServer{}
+	svc := MakeService(js)
+
+	rs := MakeServer()
+	rs.AddService(svc)
+	rn.AddServer("server99", rs)
+
+	rn.Connect("end1-99", "server99")
+	rn.Enable("end1-99", true)
+
+	{
+		reply := 0
+		e.Call("JunkServer.Handler1", "9099", &reply)
+	}
+
+	rn.LongDelays(true)
+
+	rn.DeleteServer("server99")
+
+	doneCh := make(chan bool)
+	go func() {
+		reply := 0
+		e.Call("JunkServer.Handler1", "9099", &reply)
+		doneCh <- true
+	}()
+
+	rn.LongDelays(true)
+
+	select {
+	case <-doneCh:
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	rn.LongDelays(true)
 }

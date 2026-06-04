@@ -10,8 +10,8 @@ import (
 	"github.com/anishathalye/porcupine"
 
 	"6.5840/kvsrv1/rpc"
-	"6.5840/models1"
-	"6.5840/tester1"
+	models "6.5840/models1"
+	tester "6.5840/tester1"
 )
 
 const linearizabilityCheckTimeout = 1 * time.Second
@@ -51,7 +51,7 @@ func Get(cfg *tester.Config, ck IKVClerk, key string, log *OpLog, cli int) (stri
 	start := int64(time.Since(t0))
 	val, ver, err := ck.Get(key)
 	end := int64(time.Since(t0))
-	cfg.Op()
+	cfg.OpInc()
 	if log != nil {
 		log.Append(porcupine.Operation{
 			Input:    models.KvInput{Op: 0, Key: key},
@@ -68,7 +68,7 @@ func Put(cfg *tester.Config, ck IKVClerk, key string, value string, version rpc.
 	start := int64(time.Since(t0))
 	err := ck.Put(key, value, version)
 	end := int64(time.Since(t0))
-	cfg.Op()
+	cfg.OpInc()
 	if log != nil {
 		log.Append(porcupine.Operation{
 			Input:    models.KvInput{Op: 1, Key: key, Value: value, Version: uint64(version)},
@@ -83,9 +83,7 @@ func Put(cfg *tester.Config, ck IKVClerk, key string, value string, version rpc.
 
 // Checks that the log of Clerk.Put's and Clerk.Get's is linearizable (see
 // linearizability-faq.txt)
-func checkPorcupine(
-	t *testing.T, opLog *OpLog, annotations []porcupine.Annotation, nsec time.Duration,
-) {
+func checkPorcupine(t *testing.T, opLog *OpLog, nsec time.Duration) {
 	enabled := os.Getenv("VIS_ENABLE")
 	fpath := os.Getenv("VIS_FILE")
 	res, info := porcupine.CheckOperationsVerbose(models.KvModel, opLog.Read(), nsec)
@@ -96,12 +94,13 @@ func checkPorcupine(
 			// Save the vis file in a temporary file.
 			file, err = os.CreateTemp("", "porcupine-*.html")
 		} else {
-			file, err = os.OpenFile(fpath, os.O_RDWR | os.O_CREATE | os.O_TRUNC, 0644)
+			file, err = os.OpenFile(fpath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 		}
 		if err != nil {
 			fmt.Printf("info: failed to open visualization file %s (%v)\n", fpath, err)
 		} else if enabled != "never" {
 			// Don't produce visualization file if VIS_ENABLE is set to "never".
+			annotations := tester.FinalizeAnnotations("test failed")
 			info.AddAnnotations(annotations)
 			err = porcupine.Visualize(models.KvModel, info, file)
 			if err != nil {
@@ -116,19 +115,20 @@ func checkPorcupine(
 	}
 
 	// The result is either legal or unknown.
-	if enabled == "always" {
+	if enabled == "always" && tester.GetAnnotationFinalized() {
 		var file *os.File
 		var err error
 		if fpath == "" {
 			// Save the vis file in a temporary file.
 			file, err = os.CreateTemp("", "porcupine-*.html")
 		} else {
-			file, err = os.OpenFile(fpath, os.O_RDWR | os.O_CREATE | os.O_TRUNC, 0644)
+			file, err = os.OpenFile(fpath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 		}
 		if err != nil {
 			fmt.Printf("info: failed to open visualization file %s (%v)\n", fpath, err)
 			return
 		}
+		annotations := tester.FinalizeAnnotations("test passed")
 		info.AddAnnotations(annotations)
 		err = porcupine.Visualize(models.KvModel, info, file)
 		if err != nil {
@@ -144,7 +144,7 @@ func (ts *Test) Get(ck IKVClerk, key string, cli int) (string, rpc.Tversion, rpc
 	start := int64(time.Since(t0))
 	val, ver, err := ck.Get(key)
 	end := int64(time.Since(t0))
-	ts.Op()
+	ts.OpInc()
 	if ts.oplog != nil {
 		ts.oplog.Append(porcupine.Operation{
 			Input:    models.KvInput{Op: 0, Key: key},
@@ -162,7 +162,6 @@ func (ts *Test) Put(ck IKVClerk, key string, value string, version rpc.Tversion,
 	start := int64(time.Since(t0))
 	err := ck.Put(key, value, version)
 	end := int64(time.Since(t0))
-	ts.Op()
 	if ts.oplog != nil {
 		ts.oplog.Append(porcupine.Operation{
 			Input:    models.KvInput{Op: 1, Key: key, Value: value, Version: uint64(version)},
@@ -180,9 +179,8 @@ func (ts *Test) CheckPorcupine() {
 }
 
 func (ts *Test) CheckPorcupineT(nsec time.Duration) {
-	// ts.RetrieveAnnotations() also clears the accumulated annotations so that
-	// the vis file containing client operations (generated here) won't be
+	// tester.RetrieveAnnotations() also clears the accumulated annotations so
+	// that the vis file containing client operations (generated here) won't be
 	// overridden by that without client operations (generated at cleanup time).
-	annotations := ts.RetrieveAnnotations()
-	checkPorcupine(ts.t, ts.oplog, annotations, nsec)
+	checkPorcupine(ts.t, ts.oplog, nsec)
 }

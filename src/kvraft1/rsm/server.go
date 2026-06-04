@@ -5,54 +5,74 @@ import (
 	"log"
 	"sync"
 
+	"6.5840/kvsrv1/rpc"
 	"6.5840/labgob"
 	"6.5840/labrpc"
-	"6.5840/raftapi"
-	"6.5840/tester1"
+	tester "6.5840/tester1"
 )
 
 type Inc struct {
 }
 
-type Dec struct {
-}
-
-type Rep struct {
+type IncRep struct {
 	N int
 }
 
+type Null struct {
+}
+
+type NullRep struct {
+}
+
+type Dec struct {
+}
+
+func NewRSMSrv(tc *tester.TesterClnt, ends []*labrpc.ClientEnd, grp tester.Tgid, srv int, persister *tester.Persister) []any {
+	s := newRSMSrv(ends, srv, persister, tester.MaxRaftState)
+	return []any{s.rsm.rf, s}
+}
+
 type rsmSrv struct {
-	ts      *Test
-	me      int
-	rsm     *RSM
+	me int
+
 	mu      sync.Mutex
+	rsm     *RSM
 	counter int
 }
 
-func makeRsmSrv(ts *Test, srv int, ends []*labrpc.ClientEnd, persister *tester.Persister, snapshot bool) *rsmSrv {
-	//log.Printf("mksrv %d", srv)
+func newRSMSrv(ends []*labrpc.ClientEnd, srv int, persister *tester.Persister, maxraftstate int) *rsmSrv {
 	labgob.Register(Op{})
 	labgob.Register(Inc{})
-	labgob.Register(Rep{})
+	labgob.Register(IncRep{})
+	labgob.Register(Null{})
+	labgob.Register(NullRep{})
 	labgob.Register(Dec{})
-	s := &rsmSrv{
-		ts: ts,
-		me: srv,
-	}
-	s.rsm = MakeRSM(ends, srv, persister, ts.maxraftstate, s)
-	return s
+	rs := &rsmSrv{me: srv}
+	rs.rsm = MakeRSM(ends, srv, persister, maxraftstate, rs)
+	return rs
+}
+
+func (rs *rsmSrv) GetCounter() int {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.counter
 }
 
 func (rs *rsmSrv) DoOp(req any) any {
-	//log.Printf("%d: DoOp: %v", rs.me, req)
-	if _, ok := req.(Inc); ok == false {
+	//log.Printf("%d: DoOp: %T(%v)", rs.me, req, req)
+	switch req.(type) {
+	case Inc:
+		rs.mu.Lock()
+		rs.counter += 1
+		rs.mu.Unlock()
+		return IncRep{rs.counter}
+	case Null:
+		return NullRep{}
+	default:
 		// wrong type! expecting an Inc.
 		log.Fatalf("DoOp should execute only Inc and not %T", req)
 	}
-	rs.mu.Lock()
-	rs.counter += 1
-	rs.mu.Unlock()
-	return &Rep{rs.counter}
+	return nil
 }
 
 func (rs *rsmSrv) Snapshot() []byte {
@@ -72,16 +92,31 @@ func (rs *rsmSrv) Restore(data []byte) {
 	//log.Printf("%d: restore %d", rs.me, rs.counter)
 }
 
-func (rs *rsmSrv) Kill() {
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	//log.Printf("kill %d", rs.me)
-	//rs.rsm.Kill()
-	rs.rsm = nil
+func (rs *rsmSrv) Submit(req any) (rpc.Err, any) {
+	err, rep := rs.rsm.Submit(req)
+	//log.Printf("Submit %d %v %v %T", rs.me, err, rep, rep)
+	return err, rep
 }
 
-func (rs *rsmSrv) Raft() raftapi.Raft {
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	return rs.rsm.Raft()
+type SubmitArgs struct {
+	Req any
+}
+
+type SubmitReply struct {
+	Err rpc.Err
+	Rep any
+}
+
+func (rs *rsmSrv) SubmitRPC(args *SubmitArgs, rep *SubmitReply) {
+	rep.Err, rep.Rep = rs.Submit(args.Req)
+}
+
+type GetCounterArgs struct{}
+
+type GetCounterReply struct {
+	Count int
+}
+
+func (rs *rsmSrv) GetCounterRPC(args *GetCounterArgs, rep *GetCounterReply) {
+	rep.Count = rs.GetCounter()
 }

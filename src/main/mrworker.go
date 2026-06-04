@@ -20,14 +20,14 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintf(os.Stderr, "Usage: mrworker xxx.so\n")
+	if len(os.Args) != 3 {
+		fmt.Fprintf(os.Stderr, "Usage: mrworker xxx.so sockname\n")
 		os.Exit(1)
 	}
 
 	mapf, reducef := loadPlugin(os.Args[1])
 
-	mr.Worker(mapf, reducef)
+	mr.Worker(os.Args[2], mapf, reducef)
 }
 
 // load the application Map and Reduce functions
@@ -35,16 +35,16 @@ func main() {
 func loadPlugin(filename string) (func(string, string) []mr.KeyValue, func(string, []string) string) {
 	p, err := plugin.Open(filename)
 	if err != nil {
-		log.Fatalf("Error %v, cannot load plugin %v", err.Error(), filename)
+		log.Fatalf("cannot load plugin %v", filename)
 	}
 	xmapf, err := p.Lookup("Map")
 	if err != nil {
-		log.Fatalf("Cannot find Map in %v", filename)
+		log.Fatalf("cannot find Map in %v", filename)
 	}
 	mapf := xmapf.(func(string, string) []mr.KeyValue)
 	xreducef, err := p.Lookup("Reduce")
 	if err != nil {
-		log.Fatalf("Cannot find Reduce in %v", filename)
+		log.Fatalf("cannot find Reduce in %v", filename)
 	}
 	reducef := xreducef.(func(string, []string) string)
 
